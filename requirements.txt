@@ -1,8 +1,8 @@
-flask==3.0.2
-numpy==1.26.4
-scipy==1.12.0
-python-dotenv==1.0.1
-wtforms==3.1.2
-flask-wtf==1.2.1
+flask==2.0.3
+numpy==1.24.3
+scipy==1.10.1
+python-dotenv==1.0.0
+wtforms==3.0.1
+flask-wtf==1.1.1
 serverless-wsgi==3.0.3
-werkzeug==3.0.1 
+werkzeug==2.0.3 

@@ -1,16 +1,15 @@
 [build]
 command = """
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 mkdir -p functions
-cp app.py functions/
-cp -r static functions/
-cp -r templates functions/
+cp -r * functions/
 """
 publish = "public"
 functions = "functions"
 
 [build.environment]
-PYTHON_VERSION = "3.9"
+PYTHON_VERSION = "3.8"
 
 [[redirects]]
 from = "/*"
