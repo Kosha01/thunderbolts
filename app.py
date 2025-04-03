@@ -1,131 +1,107 @@
-import sys
-import json
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify, render_template
 import numpy as np
 from scipy import stats
 import re
 
-def extract_number(text, pattern):
-    """Helper function to extract numbers from text"""
-    match = re.search(pattern, text)
-    return float(match.group(1)) if match else None
+app = Flask(__name__)
+
+def extract_number(text):
+    numbers = re.findall(r'-?\d*\.?\d+', text)
+    return [float(num) for num in numbers]
 
 def identify_distribution(text):
-    """
-    Identify the statistical distribution from the problem text.
-    Returns: tuple (distribution_name, parameters_dict, target_value)
-    """
     text = text.lower()
+    if 'binomial' in text:
+        numbers = extract_number(text)
+        if len(numbers) >= 2:
+            n = int(numbers[0])
+            p = numbers[1]
+            return 'binomial', {'n': n, 'p': p}
+    elif 'poisson' in text:
+        numbers = extract_number(text)
+        if numbers:
+            lambda_param = numbers[0]
+            return 'poisson', {'lambda': lambda_param}
+    elif 'normal' in text:
+        numbers = extract_number(text)
+        if len(numbers) >= 2:
+            mu = numbers[0]
+            sigma = numbers[1]
+            return 'normal', {'mu': mu, 'sigma': sigma}
+    return None, None
+
+def calculate_probability(dist_type, params, target=None):
+    if not target:
+        target = extract_number(params.get('target', '0'))[0]
+
+    if dist_type == 'binomial':
+        n, p = params['n'], params['p']
+        prob = stats.binom.pmf(target, n, p)
+        steps = [
+            f"Using Binomial Distribution with n={n}, p={p}",
+            f"P(X = {target}) = C({n},{target}) * {p}^{target} * (1-{p})^({n}-{target})",
+            f"Probability = {prob:.4f}"
+        ]
+        return prob, steps
+
+    elif dist_type == 'poisson':
+        lambda_param = params['lambda']
+        prob = stats.poisson.pmf(target, lambda_param)
+        steps = [
+            f"Using Poisson Distribution with λ={lambda_param}",
+            f"P(X = {target}) = (e^(-{lambda_param}) * {lambda_param}^{target}) / {target}!",
+            f"Probability = {prob:.4f}"
+        ]
+        return prob, steps
+
+    elif dist_type == 'normal':
+        mu, sigma = params['mu'], params['sigma']
+        prob = stats.norm.pdf(target, mu, sigma)
+        steps = [
+            f"Using Normal Distribution with μ={mu}, σ={sigma}",
+            f"P(X = {target}) = (1/(σ√(2π))) * e^(-(x-μ)²/(2σ²))",
+            f"Probability = {prob:.4f}"
+        ]
+        return prob, steps
+
+    return None, ["Distribution not recognized"]
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.get_json()
+    problem_text = data.get('problem_text', '')
     
-    # Extract target value (k or x) if present
+    dist_type, params = identify_distribution(problem_text)
+    if not dist_type:
+        return jsonify({
+            'error': 'Could not identify distribution type',
+            'steps': ['Please provide a valid probability problem']
+        })
+
     target = None
-    exactly_k = re.search(r'exactly\s+(\d+)', text)
-    value_x = re.search(r'x\s*=\s*(\d*\.?\d+)', text)
-    if exactly_k:
-        target = int(exactly_k.group(1))
-    elif value_x:
-        target = float(value_x.group(1))
-    
-    # Binomial Distribution
-    if any(word in text for word in ['binomial', 'success', 'failure', 'trials']):
-        n = extract_number(text, r'(\d+)\s+trials')
-        p = extract_number(text, r'probability\s+of\s+success\s+is\s+(\d*\.?\d+)')
-        if n is not None and p is not None:
-            return 'binomial', {'n': int(n), 'p': p}, target
-    
-    # Poisson Distribution
-    if any(word in text for word in ['poisson', 'rate', 'average rate']):
-        lambda_val = extract_number(text, r'rate\s+of\s+(\d*\.?\d+)')
-        if lambda_val is not None:
-            return 'poisson', {'lambda': lambda_val}, target
-    
-    # Normal Distribution
-    if any(word in text for word in ['normal', 'gaussian']):
-        mean = extract_number(text, r'mean\s+of\s+(\d*\.?\d+)')
-        std = extract_number(text, r'standard\s+deviation\s+of\s+(\d*\.?\d+)')
-        if mean is not None and std is not None:
-            return 'normal', {'mean': mean, 'std': std}, target
-    
-    return 'unknown', {}, None
+    if 'exactly' in problem_text.lower():
+        numbers = extract_number(problem_text)
+        if len(numbers) > 2:  # Assuming the last number is the target
+            target = int(numbers[-1])
 
-def calculate_probability(distribution, params, target_value=None):
-    """
-    Calculate probability based on the identified distribution and parameters.
-    Returns: tuple (result, steps)
-    """
-    steps = []
-    result = None
+    prob, steps = calculate_probability(dist_type, params, target)
     
-    try:
-        if distribution == 'binomial':
-            n, p = params['n'], params['p']
-            steps.append(f"Using Binomial Distribution with n={n} trials and p={p}")
-            steps.append(f"P(X = k) = C(n,k) * p^k * (1-p)^(n-k)")
-            
-            k = target_value if target_value is not None else n//2
-            result = float(stats.binom.pmf(k, n, p))
-            steps.append(f"For k = {k}:")
-            steps.append(f"P(X = {k}) = C({n},{k}) * {p}^{k} * (1-{p})^({n}-{k})")
-            steps.append(f"Probability = {result:.4f}")
-        
-        elif distribution == 'poisson':
-            lambda_val = params['lambda']
-            steps.append(f"Using Poisson Distribution with λ={lambda_val}")
-            steps.append(f"P(X = k) = (λ^k * e^(-λ)) / k!")
-            
-            k = target_value if target_value is not None else int(lambda_val)
-            result = float(stats.poisson.pmf(k, lambda_val))
-            steps.append(f"For k = {k}:")
-            steps.append(f"P(X = {k}) = ({lambda_val}^{k} * e^(-{lambda_val})) / {k}!")
-            steps.append(f"Probability = {result:.4f}")
-        
-        elif distribution == 'normal':
-            mean, std = params['mean'], params['std']
-            steps.append(f"Using Normal Distribution with μ={mean} and σ={std}")
-            steps.append(f"Using standard normal distribution formula:")
-            steps.append(f"Z = (X - μ) / σ")
-            
-            x = target_value if target_value is not None else mean
-            result = float(stats.norm.pdf(x, mean, std))
-            z_score = (x - mean) / std
-            steps.append(f"For x = {x}:")
-            steps.append(f"Z = ({x} - {mean}) / {std} = {z_score:.4f}")
-            steps.append(f"Probability density at x={x} is {result:.4f}")
-        
-        return result, steps
-    
-    except Exception as e:
-        return None, [f"Error in calculation: {str(e)}"]
-
-def main(problem_text):
-    try:
-        distribution, params, target = identify_distribution(problem_text)
-        
-        if distribution == 'unknown':
-            return {
-                'error': "Could not identify the distribution type or extract necessary parameters."
-            }
-        
-        result, steps = calculate_probability(distribution, params, target)
-        
-        if result is None:
-            return {
-                'error': "Error occurred during calculation."
-            }
-        
-        return {
-            'distribution': distribution,
-            'result': result,
+    if prob is None:
+        return jsonify({
+            'error': 'Could not calculate probability',
             'steps': steps
-        }
-    
-    except Exception as e:
-        return {
-            'error': str(e)
-        }
+        })
+
+    return jsonify({
+        'distribution': dist_type,
+        'parameters': params,
+        'probability': float(prob),
+        'steps': steps
+    })
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        problem_text = sys.argv[1]
-        result = main(problem_text)
-        print(json.dumps(result)) 
+    app.run(debug=True) 
