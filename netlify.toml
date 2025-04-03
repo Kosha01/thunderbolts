@@ -1,0 +1,29 @@
+[build]
+command = """
+pip install -r requirements.txt
+mkdir -p functions
+cp app.py functions/
+cp -r static functions/
+cp -r templates functions/
+"""
+publish = "public"
+functions = "functions"
+
+[build.environment]
+PYTHON_VERSION = "3.9"
+
+[[redirects]]
+from = "/*"
+to = "/.netlify/functions/app"
+status = 200
+
+[functions]
+directory = "functions"
+node_bundler = "esbuild"
+
+[dev]
+framework = "#custom"
+command = "python app.py"
+targetPort = 5000
+port = 8888
+publish = "public" 
