@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistical Distribution Calculator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="text-center mb-0">
+                            <i class="fas fa-calculator me-2"></i>
+                            Statistical Distribution Calculator
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <!-- Distribution Types Info -->
+                        <div class="distribution-info mb-4">
+                            <h5 class="text-primary mb-3">Supported Distributions:</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="dist-type">
+                                        <i class="fas fa-dice me-2"></i>
+                                        <strong>Binomial</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="dist-type">
+                                        <i class="fas fa-chart-line me-2"></i>
+                                        <strong>Poisson</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="dist-type">
+                                        <i class="fas fa-bell-curve me-2"></i>
+                                        <strong>Normal</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input Examples -->
+                        <div class="examples-section mb-4">
+                            <h5 class="text-primary mb-2">Example Inputs:</h5>
+                            <div class="example-box">
+                                <small class="text-muted">
+                                    <ul>
+                                        <li>"In a binomial distribution with 10 trials and probability of success is 0.3, what is the probability of exactly 3 successes?"</li>
+                                        <li>"In a Poisson distribution with a rate of 2.5 events per hour, what is the probability of exactly 3 events?"</li>
+                                        <li>"For a normal distribution with mean of 70 and standard deviation of 5, what is the probability density at x=75?"</li>
+                                    </ul>
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Input Form -->
+                        <form id="problemForm" class="mb-4">
+                            <div class="mb-3">
+                                <label for="problem_text" class="form-label">
+                                    <i class="fas fa-pencil-alt me-2"></i>
+                                    Enter your probability problem:
+                                </label>
+                                <textarea class="form-control" id="problem_text" rows="3" 
+                                    placeholder="Type your probability problem here..." required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-calculator me-2"></i>
+                                Calculate Probability
+                            </button>
+                        </form>
+
+                        <!-- Error Display -->
+                        <div id="errorAlert" class="alert alert-danger d-none" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span id="errorMessage"></span>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div id="resultSection" class="result-section mt-4 d-none">
+                            <h4 class="text-primary">
+                                <i class="fas fa-chart-pie me-2"></i>
+                                Analysis Results
+                            </h4>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Identified Distribution: </strong>
+                                <span id="distributionType"></span>
+                            </div>
+                            
+                            <div id="stepsSection" class="card mt-3">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-list-ol me-2"></i>
+                                        Step-by-Step Solution
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <ol id="stepsList" class="step-list">
+                                    </ol>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-success mt-3">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <strong>Final Result: </strong>
+                                <span id="finalResult"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('problemForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const problemText = document.getElementById('problem_text').value;
+            const errorAlert = document.getElementById('errorAlert');
+            const resultSection = document.getElementById('resultSection');
+            
+            try {
+                const response = await fetch('/.netlify/functions/app/calculate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ problem_text: problemText }),
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    errorAlert.classList.remove('d-none');
+                    errorAlert.querySelector('#errorMessage').textContent = data.error;
+                    resultSection.classList.add('d-none');
+                    return;
+                }
+                
+                // Hide error and show results
+                errorAlert.classList.add('d-none');
+                resultSection.classList.remove('d-none');
+                
+                // Update results
+                document.getElementById('distributionType').textContent = data.distribution.charAt(0).toUpperCase() + data.distribution.slice(1);
+                document.getElementById('finalResult').textContent = data.result.toFixed(4);
+                
+                // Update steps
+                const stepsList = document.getElementById('stepsList');
+                stepsList.innerHTML = data.steps.map(step => `<li>${step}</li>`).join('');
+                
+            } catch (error) {
+                errorAlert.classList.remove('d-none');
+                errorAlert.querySelector('#errorMessage').textContent = 'An error occurred while processing your request.';
+                resultSection.classList.add('d-none');
+            }
+        });
+    </script>
+</body>
+</html> 

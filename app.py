@@ -1,19 +1,9 @@
-from flask import Flask, render_template, request, jsonify, flash
-from flask_wtf import FlaskForm, CSRFProtect
-from wtforms import StringField, FloatField, SubmitField
-from wtforms.validators import DataRequired
+import sys
+import json
+from flask import Flask, jsonify
 import numpy as np
 from scipy import stats
 import re
-import os
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-for-testing')  # Change in production
-csrf = CSRFProtect(app)
-
-class ProblemForm(FlaskForm):
-    problem_text = StringField('Problem Description', validators=[DataRequired()])
-    submit = SubmitField('Solve Problem')
 
 def extract_number(text, pattern):
     """Helper function to extract numbers from text"""
@@ -73,7 +63,7 @@ def calculate_probability(distribution, params, target_value=None):
             steps.append(f"P(X = k) = C(n,k) * p^k * (1-p)^(n-k)")
             
             k = target_value if target_value is not None else n//2
-            result = stats.binom.pmf(k, n, p)
+            result = float(stats.binom.pmf(k, n, p))
             steps.append(f"For k = {k}:")
             steps.append(f"P(X = {k}) = C({n},{k}) * {p}^{k} * (1-{p})^({n}-{k})")
             steps.append(f"Probability = {result:.4f}")
@@ -84,7 +74,7 @@ def calculate_probability(distribution, params, target_value=None):
             steps.append(f"P(X = k) = (λ^k * e^(-λ)) / k!")
             
             k = target_value if target_value is not None else int(lambda_val)
-            result = stats.poisson.pmf(k, lambda_val)
+            result = float(stats.poisson.pmf(k, lambda_val))
             steps.append(f"For k = {k}:")
             steps.append(f"P(X = {k}) = ({lambda_val}^{k} * e^(-{lambda_val})) / {k}!")
             steps.append(f"Probability = {result:.4f}")
@@ -96,7 +86,7 @@ def calculate_probability(distribution, params, target_value=None):
             steps.append(f"Z = (X - μ) / σ")
             
             x = target_value if target_value is not None else mean
-            result = stats.norm.pdf(x, mean, std)
+            result = float(stats.norm.pdf(x, mean, std))
             z_score = (x - mean) / std
             steps.append(f"For x = {x}:")
             steps.append(f"Z = ({x} - {mean}) / {std} = {z_score:.4f}")
@@ -107,46 +97,35 @@ def calculate_probability(distribution, params, target_value=None):
     except Exception as e:
         return None, [f"Error in calculation: {str(e)}"]
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    form = ProblemForm()
-    result = None
-    steps = None
-    distribution = None
-    error = None
+def main(problem_text):
+    try:
+        distribution, params, target = identify_distribution(problem_text)
+        
+        if distribution == 'unknown':
+            return {
+                'error': "Could not identify the distribution type or extract necessary parameters."
+            }
+        
+        result, steps = calculate_probability(distribution, params, target)
+        
+        if result is None:
+            return {
+                'error': "Error occurred during calculation."
+            }
+        
+        return {
+            'distribution': distribution,
+            'result': result,
+            'steps': steps
+        }
     
-    if request.method == 'POST':
-        if form.validate_on_submit():
-            try:
-                problem_text = form.problem_text.data
-                distribution, params, target = identify_distribution(problem_text)
-                
-                if distribution == 'unknown':
-                    error = "Could not identify the distribution type or extract necessary parameters. Please check your input format."
-                else:
-                    result, steps = calculate_probability(distribution, params, target)
-                    if result is None:
-                        error = "Error occurred during calculation. Please check your input values."
-            
-            except Exception as e:
-                error = f"An error occurred: {str(e)}"
-        else:
-            error = "Invalid form submission. Please try again."
-    
-    return render_template('index.html', form=form, result=result, 
-                         steps=steps, distribution=distribution, error=error)
-
-@app.errorhandler(500)
-def internal_error(error):
-    return render_template('index.html', 
-                         form=ProblemForm(),
-                         error="An internal server error occurred. Please try again."), 500
-
-@app.errorhandler(404)
-def not_found_error(error):
-    return render_template('index.html',
-                         form=ProblemForm(),
-                         error="Page not found. Please check the URL."), 404
+    except Exception as e:
+        return {
+            'error': str(e)
+        }
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    if len(sys.argv) > 1:
+        problem_text = sys.argv[1]
+        result = main(problem_text)
+        print(json.dumps(result)) 

@@ -1,9 +1,10 @@
 [build]
-command = "pip install -r requirements.txt && mkdir -p functions && cp -r * functions/"
+command = "npm install && npm run build"
 publish = "public"
 functions = "functions"
 
 [build.environment]
+NODE_VERSION = "18"
 PYTHON_VERSION = "3.9"
 NETLIFY_USE_PNPM = "false"
 NETLIFY_USE_YARN = "false"
